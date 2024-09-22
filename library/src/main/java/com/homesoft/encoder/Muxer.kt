@@ -7,8 +7,8 @@ import android.media.MediaCodecList
 import android.media.MediaCodecList.REGULAR_CODECS
 import android.util.Log
 import androidx.annotation.RawRes
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.io.IOException
 
@@ -34,7 +34,7 @@ class Muxer(private val context: Context, private val file: File) {
     }
 
     companion object {
-        private val TAG = Muxer::class.java.simpleName
+        private val TAG = "qqq ${Muxer::class.java.simpleName}"
     }
 
     // Initialize a default configuration
@@ -56,8 +56,10 @@ class Muxer(private val context: Context, private val file: File) {
      * List containing images in any of the following formats:
      * [Bitmap] [@DrawRes Int] [Canvas]
      */
-    fun mux(imageList: List<Any>,
-            @RawRes audioTrack: Int? = null): MuxingResult {
+    fun mux(
+        imageList: List<Any>,
+        @RawRes audioTrack: Int? = null
+    ): MuxingResult {
         // Returns on a callback a finished video
         Log.d(TAG, "Generating video")
         val frameBuilder = FrameBuilder(context, muxerConfig, audioTrack)
@@ -71,8 +73,13 @@ class Muxer(private val context: Context, private val file: File) {
             return MuxingError("Start encoder failed", e)
         }
 
-        for (image in imageList) {
-            frameBuilder.createFrame(image)
+        try {
+            for (image in imageList) {
+                frameBuilder.createFrame(image)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Log.e(TAG, "CreateFrameException $e")
         }
 
         // Release the video codec so we can mux in the audio frames separately
@@ -83,6 +90,8 @@ class Muxer(private val context: Context, private val file: File) {
 
         // Release everything
         frameBuilder.releaseAudioExtractor()
+
+        runBlocking { delay(2000) }
         frameBuilder.releaseMuxer()
 
         muxingCompletionListener?.onVideoSuccessful(file)

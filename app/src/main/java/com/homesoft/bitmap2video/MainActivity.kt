@@ -8,11 +8,16 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
-import com.homesoft.bitmap2video.FileUtils.getVideoFile
+import androidx.core.net.toUri
+import com.homesoft.bitmap2video.FileUtils.createFile
 import com.homesoft.bitmap2video.FileUtils.shareVideo
 import com.homesoft.bitmap2video.databinding.ActivityMainBinding
-import com.homesoft.encoder.*
+import com.homesoft.encoder.Muxer
+import com.homesoft.encoder.MuxerConfig
+import com.homesoft.encoder.MuxingCompletionListener
+import com.homesoft.encoder.MuxingError
+import com.homesoft.encoder.MuxingSuccess
+import com.homesoft.encoder.isCodecSupported
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -36,7 +41,7 @@ import java.io.File
 
 class MainActivity : AppCompatActivity() {
     companion object {
-        private val TAG: String = MainActivity::class.java.simpleName
+        private val TAG: String = "qqq ${MainActivity::class.java.simpleName}"
         private val imageArray: List<Int> = listOf(
                 R.raw.im1,
                 R.raw.im2,
@@ -108,7 +113,7 @@ class MainActivity : AppCompatActivity() {
 
     // Basic implementation
     private fun basicVideoCreation() {
-        videoFile = getVideoFile(this@MainActivity, "test.mp4")
+        videoFile = createFile()
         videoFile?.run {
             muxerConfig = MuxerConfig(this, 600, 600, mimeType, 3, 1F, 1500000)
             val muxer = Muxer(this@MainActivity, muxerConfig!!)
@@ -134,8 +139,11 @@ class MainActivity : AppCompatActivity() {
         })
 
         // Needs to happen on a background thread (long-running process)
-        lifecycleScope.launch(Dispatchers.IO) {
-            muxer.mux(imageArray, R.raw.bensound_happyrock)
+        Thread {
+            val result = muxer.mux(imageArray, R.raw.bensound_happyrock)
+            if(result is MuxingSuccess){
+                Log.d(TAG, "uri=${result.file.toUri()}")
+            }
         }
     }
 

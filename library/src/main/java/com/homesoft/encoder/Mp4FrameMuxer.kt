@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit
 
 class Mp4FrameMuxer(path: String, private val fps: Float) : FrameMuxer {
     companion object {
-        private val TAG: String = Mp4FrameMuxer::class.java.simpleName
+        private val TAG: String = "qqq " + Mp4FrameMuxer::class.java.simpleName
     }
 
     private val frameUsec: Long = run {
@@ -52,9 +52,9 @@ class Mp4FrameMuxer(path: String, private val fps: Float) : FrameMuxer {
         videoTrackIndex = muxer.addTrack(videoFormat)
         audioFormat?.run {
             audioTrackIndex = muxer.addTrack(audioFormat)
-            Log.e("Audio format: %s", audioFormat.toString())
+            Log.d(TAG, audioFormat.toString())
         }
-        Log.d("Video format: %s", videoFormat.toString())
+        Log.d(TAG, videoFormat.toString())
         muxer.start()
         started = true
     }

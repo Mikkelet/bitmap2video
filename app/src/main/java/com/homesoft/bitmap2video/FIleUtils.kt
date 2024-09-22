@@ -3,10 +3,12 @@ package com.homesoft.bitmap2video
 import android.content.Context
 import android.content.Intent
 import android.content.res.AssetFileDescriptor
+import android.os.Environment
 import android.util.Log
 import androidx.annotation.RawRes
 import androidx.core.content.FileProvider
 import java.io.File
+import java.util.UUID
 
 /*
  * Copyright (C) 2019 Israel Flores
@@ -72,6 +74,12 @@ object FileUtils {
         val file = File(mediaFolder, fileName)
         Log.d(TAG, "Got file at: " + file.absolutePath)
         return file
+    }
+
+    fun createFile(): File {
+        val name = "VID_${UUID.randomUUID()}.mp4"
+        val root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM).toString()
+        return File(root, "/$name")
     }
 
     /**

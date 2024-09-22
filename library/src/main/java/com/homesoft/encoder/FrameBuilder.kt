@@ -31,25 +31,29 @@ import java.nio.ByteBuffer
  * limitations under the License.
  */
 
-const val TAG = "FrameBuilder"
+const val TAG = "qqq FrameBuilder"
 const val VERBOSE: Boolean = false
-const val SECOND_IN_USEC = 1000000
-const val TIMEOUT_USEC = 10000
+const val SECOND_IN_USEC = 1_000_000L
+const val TIMEOUT_USEC = 1_000_000L
 
 class FrameBuilder(
-        private val context: Context,
-        private val muxerConfig: MuxerConfig,
-        @RawRes private val audioTrackResource: Int?
+    private val context: Context,
+    private val muxerConfig: MuxerConfig,
+    @RawRes private val audioTrackResource: Int?
 ) {
 
     private val mediaFormat: MediaFormat = run {
-        val format = MediaFormat.createVideoFormat(muxerConfig.mimeType, muxerConfig
-                .videoWidth, muxerConfig.videoHeight)
+        val format = MediaFormat.createVideoFormat(
+            muxerConfig.mimeType, muxerConfig
+                .videoWidth, muxerConfig.videoHeight
+        )
 
         // Set some properties.  Failing to specify some of these can cause the MediaCodec
         // configure() call to throw an unhelpful exception.
-        format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
-                MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+        format.setInteger(
+            MediaFormat.KEY_COLOR_FORMAT,
+            MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
+        )
         format.setInteger(MediaFormat.KEY_BIT_RATE, muxerConfig.bitrate)
         format.setFloat(MediaFormat.KEY_FRAME_RATE, muxerConfig.framesPerSecond)
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, muxerConfig.iFrameInterval)
@@ -69,12 +73,13 @@ class FrameBuilder(
 
     private var audioExtractor: MediaExtractor? = run {
         if (audioTrackResource != null) {
-            val assetFileDescriptor: AssetFileDescriptor = context.resources.openRawResourceFd(audioTrackResource)
+            val assetFileDescriptor: AssetFileDescriptor =
+                context.resources.openRawResourceFd(audioTrackResource)
             val extractor = MediaExtractor()
             extractor.setDataSource(
-                    assetFileDescriptor.fileDescriptor,
-                    assetFileDescriptor.startOffset,
-                    assetFileDescriptor.length
+                assetFileDescriptor.fileDescriptor,
+                assetFileDescriptor.startOffset,
+                assetFileDescriptor.length
             )
             extractor
         } else {
@@ -89,7 +94,16 @@ class FrameBuilder(
         mediaCodec.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
         surface = mediaCodec.createInputSurface()
         mediaCodec.start()
-        drainCodec(false)
+        drainOrRelease(false)
+    }
+
+    private fun drainOrRelease(endOfStream: Boolean) {
+        try {
+            drainCodec(endOfStream)
+        } catch (e: Exception) {
+            Log.d(TAG, e.toString())
+            throw e
+        }
     }
 
     fun createFrame(image: Any) {
@@ -101,9 +115,13 @@ class FrameBuilder(
                     val bitmap = BitmapFactory.decodeResource(context.resources, image)
                     drawBitmapAndPostCanvas(bitmap, canvas)
                 }
+
                 is Bitmap -> drawBitmapAndPostCanvas(image, canvas)
                 is Canvas -> postCanvasFrame(image)
-                else -> Log.e(TAG, "Image type $image is not supported. Try using a Canvas or a Bitmap")
+                else -> Log.e(
+                    TAG,
+                    "Image type $image is not supported. Try using a Canvas or a Bitmap"
+                )
             }
         }
     }
@@ -131,7 +149,7 @@ class FrameBuilder(
      */
     private fun postCanvasFrame(canvas: Canvas?) {
         surface?.unlockCanvasAndPost(canvas)
-        drainCodec(false)
+        drainOrRelease(false)
     }
 
     /**
@@ -150,10 +168,13 @@ class FrameBuilder(
             if (VERBOSE) Log.d(TAG, "sending EOS to encoder")
             mediaCodec.signalEndOfInputStream()
         }
-        var encoderOutputBuffers: Array<ByteBuffer?>? = mediaCodec.getOutputBuffers()
+
         while (true) {
-            val encoderStatus: Int = mediaCodec.dequeueOutputBuffer(bufferInfo, TIMEOUT_USEC
-                    .toLong())
+            val encoderStatus: Int = mediaCodec.dequeueOutputBuffer(
+                bufferInfo,
+                TIMEOUT_USEC
+            )
+            Log.d(TAG, "encoderStatus=$encoderStatus")
             if (encoderStatus == MediaCodec.INFO_TRY_AGAIN_LATER) {
                 // no output available yet
                 if (!endOfStream) {
@@ -161,14 +182,7 @@ class FrameBuilder(
                 } else {
                     if (VERBOSE) Log.d(TAG, "no output available, spinning to await EOS")
                 }
-            } else if (encoderStatus == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
-                // not expected for an encoder
-                encoderOutputBuffers = mediaCodec.getOutputBuffers()
             } else if (encoderStatus == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                // should happen before receiving buffers, and should only happen once
-                if (frameMuxer.isStarted()) {
-                    throw RuntimeException("format changed twice")
-                }
                 val newFormat: MediaFormat = mediaCodec.outputFormat
                 Log.d(TAG, "encoder output format changed: $newFormat")
 
@@ -178,8 +192,8 @@ class FrameBuilder(
                 Log.wtf(TAG, "unexpected result from encoder.dequeueOutputBuffer: $encoderStatus")
                 // let's ignore it
             } else {
-                val encodedData = encoderOutputBuffers?.get(encoderStatus)
-                        ?: throw RuntimeException("encoderOutputBuffer  $encoderStatus was null")
+                val encodedData = mediaCodec.getOutputBuffer(encoderStatus)
+                    ?: throw RuntimeException("encoderOutputBuffer  $encoderStatus was null")
                 if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
                     // The codec config data was pulled out and fed to the muxer when we got
                     // the INFO_OUTPUT_FORMAT_CHANGED status.  Ignore it.
@@ -230,12 +244,19 @@ class FrameBuilder(
                 frameMuxer.muxAudioFrame(audioBuffer, audioBufferInfo)
                 audioExtractor!!.advance()
                 audioTrackFrameCount++
-                if (VERBOSE) Log.d(TAG, "Frame ($audioTrackFrameCount Flags: ${audioBufferInfo.flags} Size(KB): ${audioBufferInfo.size / 1024}")
+                if (VERBOSE) Log.d(
+                    TAG,
+                    "Frame ($audioTrackFrameCount Flags: ${audioBufferInfo.flags} Size(KB): ${audioBufferInfo.size / 1024}"
+                )
                 // We want the sound to play for a few more seconds after the last image
                 if ((finalAudioTime > finalVideoTime) &&
-                        (finalAudioTime % finalVideoTime > muxerConfig.framesPerImage * SECOND_IN_USEC)) {
+                    (finalAudioTime % finalVideoTime > muxerConfig.framesPerImage * SECOND_IN_USEC)
+                ) {
                     sawEOS = true
-                    if (VERBOSE) Log.d(TAG, "Final audio time: $finalAudioTime video time: $finalVideoTime")
+                    if (VERBOSE) Log.d(
+                        TAG,
+                        "Final audio time: $finalAudioTime video time: $finalVideoTime"
+                    )
                 }
             }
         }
@@ -247,7 +268,7 @@ class FrameBuilder(
     fun releaseVideoCodec() {
         // Release the video layer
         if (VERBOSE) Log.d(TAG, "releasing encoder objects")
-        drainCodec(true)
+        drainOrRelease(true)
         mediaCodec.stop()
         mediaCodec.release()
         surface?.release()
